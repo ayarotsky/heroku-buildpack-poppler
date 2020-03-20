@@ -1,5 +1,4 @@
-#!/usr/bin/env bash
-# bin/detect <build-dir>
+#!/bin/sh
 
 echo "Poppler 0.56.0"
 exit 0

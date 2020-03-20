@@ -1,19 +1,59 @@
-#!/bin/bash
+#!/bin/sh
+
+set -e
 
 BUILD_DIR=$1
-INSTALL_DIR=$BUILD_DIR/vendor/poppler
-ENVSCRIPT=$BUILD_DIR/.profile.d/poppler.sh
-POPPLER_DIR=${HOME}/vendor/poppler
+CACHE_DIR=$2
 
-echo "Untarring poppler.tar.xz into ${INSTALL_DIR}"
+# Fontconfig
+FONTCONFIG_VERSION="2.10.2"
+FILE_NAME="fontconfig-${FONTCONFIG_VERSION}.tar.gz"
 
-mkdir -p $INSTALL_DIR
-tar xf poppler-0.56.0.tar.xz -C $INSTALL_DIR
+mkdir -p $CACHE_DIR
+if ! [ -e $CACHE_DIR/$FILE_NAME ]; then
+  echo "-----> building Fontconfig buildpack binaries"
+  cd $CACHE_DIR
+  echo $CACHE_DIR/$FILE_NAME
+  echo "https://www.freedesktop.org/software/fontconfig/release/$FILE_NAME"
+  curl https://www.freedesktop.org/software/fontconfig/release/$FILE_NAME > $CACHE_DIR/$FILE_NAME
+  tar -xzf $FILE_NAME
+  cd "fontconfig-${FONTCONFIG_VERSION}"
+  ./configure
+  make
+fi
 
-echo "Complete!"
-echo "Building runtime environment for poppler"
+echo "-----> Extracting Fontconfig binaries"
+mkdir -p $BUILD_DIR/vendor/fontconfig
+echo "cp -rf \"${CACHE_DIR}/fontconfig-${FONTCONFIG_VERSION}/*\" $BUILD_DIR/vendor/fontconfig"
+cp -rf "${CACHE_DIR}/fontconfig-${FONTCONFIG_VERSION}/" $BUILD_DIR/vendor/fontconfig
 
-mkdir -p $BUILD_DIR/.profile.d
+# Poppler
+VERSION="0.56.0"
+FILE_NAME="poppler-${VERSION}.tar.xz"
 
-echo "export PATH=\"$POPPLER_DIR/bin:\$PATH\"" > $ENVSCRIPT
-echo "export LD_LIBRARY_PATH=\"$POPPLER_DIR/lib:\$LD_LIBRARY_PATH\"" >> $ENVSCRIPT
+mkdir -p $CACHE_DIR
+if ! [ -e $CACHE_DIR/$FILE_NAME ]; then
+  echo "-----> building Poppler buildpack binaries"
+  cd $CACHE_DIR
+  echo "https://poppler.freedesktop.org/$FILE_NAME"
+  curl https://poppler.freedesktop.org/$FILE_NAME > $CACHE_DIR/$FILE_NAME
+  tar -xJf $FILE_NAME
+  cd "poppler-${VERSION}"
+  DISABLED="--disable-abiword-output --disable-gtk-test --disable-poppler-qt --disable-poppler-qt4 --disable-splash-output --disable-gdk"
+  FREETYPE_CONFIG=freetype-config
+  FONTCONFIG_LIBS="-L/${BUILD_DIR}/vendor/fontconfig/fontconfig-${FONTCONFIG_VERSION}/src/.libs/ -lfontconfig" FONTCONFIG_CFLAGS="-I/${BUILD_DIR}/vendor/fontconfig/fontconfig-${FONTCONFIG_VERSION}/" FREETYPE_LIBS=`$FREETYPE_CONFIG --libs` FREETYPE_CFLAGS=`$FREETYPE_CONFIG --cflags` ./configure --enable-static=yes --enable-shared=no $DISABLE
+  make
+
+  mkdir keep
+  cp utils/pdftops keep/
+  make clean
+fi
+
+echo "-----> Extracting Poppler binaries"
+mkdir -p $BUILD_DIR/vendor/poppler/poppler-$VERSION/utils
+cp -f $CACHE_DIR/poppler-$VERSION/keep/pdftops $BUILD_DIR/vendor/poppler/poppler-$VERSION/utils/pdftops
+
+echo "-----> Linking binaries"
+mkdir -p $BUILD_DIR/bin
+cd $BUILD_DIR/bin
+ln -s ../vendor/poppler/poppler-$VERSION/utils/pdftops .

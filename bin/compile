@@ -46,7 +46,9 @@ if ! [ -e $CACHE_DIR/$FILE_NAME ]; then
   make
 
   mkdir keep
-  cp utils/pdftops keep/
+  for bin in $POPPLER_BINS; do
+    cp utils/$bin keep/
+  done
   make clean
 fi
 
